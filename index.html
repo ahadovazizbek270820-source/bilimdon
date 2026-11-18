@@ -347,10 +347,10 @@ const NEWS = [
 ];
 const ROL = {admin:"Admin", teacher:"O'qituvchi", student:"O'quvchi", parent:"Ota-ona"};
 const TABS = {
-  admin:[["stats","Statistika"],["data","Barcha ma'lumotlar"],["accounts","Hisoblar"],["parents","Ota-onalar"],["olymp","Olimpiadalar"],["certm","Sertifikat tayyorlovi"],["tests","Testlar"],["bank","Test bazasi"],["allres","Barcha natijalar"],["news","Yangiliklar"],["archive","O'chirilganlar"]],
+  admin:[["stats","Statistika"],["data","Barcha ma'lumotlar"],["accounts","Hisoblar"],["parents","Ota-onalar"],["olymp","Olimpiadalar"],["certm","Sertifikat tayyorlovi"],["tests","Testlar"],["bank","Test bazasi"],["allres","Barcha natijalar"],["news","Yangiliklar"],["archive","O'chirilganlar"],["look","Sayt ko'rinishi"]],
   teacher:[["tests","Mening testlarim"],["olymp","Olimpiadalar"],["certm","Sertifikat tayyorlovi"],["results","Natijalar"],["students","O'quvchilarim"],["parents","Ota-onalar"],["bank","Test bazasi"],["news","Yangiliklar"]],
   student:[["daily","Kunlik test"],["olymp","Olimpiadalar"],["prep","Tayyorlov"],["tests","Testlar"],["mine","Mening natijalarim"],["cert","Sertifikat"],["ranking","Reyting TOP-100"],["awards","Yutuqlarim"],["mistakes","Xato daftari"],["news","Yangiliklar"]],
-  parent:[["child","Farzandim"],["monitor","Kuzatuv"],["cmistakes","Farzand xatolari"],["report","Haftalik hisobot"],["news","Yangiliklar"],["settings","Sozlamalar"]]
+  parent:[["child","Farzandim"],["monitor","Kuzatuv"],["cmistakes","Farzand xatolari"],["report","Haftalik hisobot"],["news","Yangiliklar"]]
 };
 
 /* ===== HOLAT ===== */
@@ -397,6 +397,7 @@ function render(){
     S.tab === "mine" ? studentMine() :
     S.tab === "ranking" ? rankingView() :
     S.tab === "awards" ? awardsView() :
+    S.tab === "look" ? adminLookView() :
     S.tab === "stats" ? adminStats() :
     S.tab === "allres" ? adminResults() :
     S.tab === "child" ? childView() :
@@ -1111,7 +1112,8 @@ const BG_PRESETS = {
   rose:    {label:"Pushti", bg:"#F7E4E1"},
   night:   {label:"Tungi", bg:"#1C2A24"}
 };
-function bgSetting(){ try{ return JSON.parse(safeLS.getItem("bo_bg") || "null") || {}; }catch(e){ return {}; } }
+function bgSetting(){ return (SETTINGS && SETTINGS.bg) || {}; }
+function adminLookView(){ return parentSettingsView(); }
 function lumOf(hex){ const n = parseInt(hex.slice(1), 16); return (0.299*((n>>16)&255) + 0.587*((n>>8)&255) + 0.114*(n&255)) / 255; }
 function applyBg(){
   const s = bgSetting(), st = document.body.style;
@@ -1890,7 +1892,7 @@ function setList(col, list){
   else if(col === "news") NEWS.splice(0, NEWS.length, ...list);
   else if(col === "bank") BANK = list.map(r => [r.f, r.b, r.s, r.v, r.j, r.id]);
   else if(col === "archive") ARCHIVE = list;
-  else if(col === "settings"){ const r = list.find(x => x.id === "main") || list[0]; if(r) SETTINGS = Object.assign({id:"main", cert:false, prep:false}, r, {id:"main"}); }
+  else if(col === "settings"){ const r = list.find(x => x.id === "main") || list[0]; if(r) SETTINGS = Object.assign({id:"main", cert:false, prep:false}, r, {id:"main"}); applyBg(); }
 }
 function markSynced(col){
   Object.keys(lastSaved).forEach(k => { if(k.startsWith(col + "/")) delete lastSaved[k]; });
@@ -2173,9 +2175,9 @@ window.addEventListener("pagehide", () => { saveSoon(); saveExamLocal(); saveDra
 document.addEventListener("visibilitychange", () => { if(document.visibilityState === "hidden"){ saveSoon(); saveExamLocal(); saveDraftLocal(); } });
 document.addEventListener("click", e => {
   const b = e.target.closest('[data-act="bg"]'); if(!b) return;
-  if(b.dataset.v === "default") safeLS.removeItem("bo_bg");
-  else safeLS.setItem("bo_bg", JSON.stringify({preset: b.dataset.v}));
-  applyBg(); render();
+  if(!S.user || S.user.rol !== "admin") return;
+  SETTINGS.bg = b.dataset.v === "default" ? null : {preset: b.dataset.v};
+  saveSoon(); applyBg(); render();
 });
 document.addEventListener("click", e => { if(e.target.closest(".dark-btn")) applyBg(); });
 document.addEventListener("click", e => {
@@ -2293,8 +2295,9 @@ document.addEventListener("change", e => {
 });
 document.addEventListener("input", e => {
   if(!e.target.matches("[data-bg-color]")) return;
-  safeLS.setItem("bo_bg", JSON.stringify({color: e.target.value}));
-  applyBg();
+  if(!S.user || S.user.rol !== "admin") return;
+  SETTINGS.bg = {color: e.target.value};
+  saveSoon(); applyBg();
 });
 
 document.addEventListener("click", e => {
