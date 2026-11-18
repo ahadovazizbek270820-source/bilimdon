@@ -390,7 +390,7 @@ function render(){
 
   const tabs = TABS[u.rol];
   if(!tabs.some(t => t[0] === S.tab)) S.tab = tabs[0][0];
-  const nav = `<div class="tabs">${tabs.map(([k, n]) => `<button class="chip" aria-pressed="${S.tab === k}" data-act="tab" data-v="${k}">${u.rol === "student" && ((k === "cert" && !hasAccess("cert")) || (k === "prep" && !hasAccess("prep"))) ? "🔒 " : ""}${n}</button>`).join("")}</div>`;
+  const nav = `<div class="tabs">${tabs.map(([k, n]) => `<button class="chip" aria-pressed="${S.tab === k}" data-act="tab" data-v="${k}">${u.rol === "student" && ((k === "cert" && !hasAccess("cert")) || (k === "prep" && !hasAccess("prep"))) ? "🔒 " : ""}${n}${k === "certm" && pendingCount() ? " 🔔" + pendingCount() : ""}</button>`).join("")}</div>`;
   const body =
     S.tab === "accounts" ? adminAccounts() :
     S.tab === "results" ? teacherResults() :
@@ -807,6 +807,7 @@ const hasAccess = k => {
 };
 const sectionOpen = k => hasAccess(k);
 const canManage = () => !!S.user && ["admin","teacher"].includes(S.user.rol);
+const pendingCount = () => canManage() ? USERS.filter(u => u.rol === "student").reduce((n, u) => n + (u.sorov || []).length, 0) : 0;
 const SEC_NAMES = {cert:"Sertifikat", prep:"Tayyorlov"};
 function lockedView(name, k){
   const me = S.user && userById(S.user.id);
@@ -1284,6 +1285,11 @@ function adminTests(){
 
 /* ===== ADMIN: STATISTIKA, NATIJALAR, YANGILIKLAR ===== */
 function adminStats(){
+  const n = pendingCount();
+  const note = n ? `<section class="panel" style="margin-bottom:16px;border-color:#b18a3d"><strong>🔔 O'quvchilardan ${n} ta yangi so'rov bor.</strong> <button class="btn sm" data-act="tab" data-v="certm" style="margin-left:10px">So'rovlarni ko'rish</button></section>` : "";
+  return note + adminStatsBase();
+}
+function adminStatsBase(){
   const cnt = r => USERS.filter(u => u.rol === r).length;
   const avg = RESULTS.length ? Math.round(RESULTS.reduce((s, r) => s + r.ball, 0) / RESULTS.length) : 0;
   const items = [["O'quvchilar", cnt("student")], ["O'qituvchilar", cnt("teacher")], ["Adminlar", cnt("admin")], ["Testlar", TESTS.length], ["Topshirilgan javoblar", RESULTS.length], ["O'rtacha ball", avg]];
