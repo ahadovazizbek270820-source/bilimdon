@@ -1861,22 +1861,24 @@ function mergeSeed(){
   let n = 0; SEED.forEach(q => { if(!have.has(q[5]) && !gone.has(q[5])){ BANK.push(q.slice()); n++; } });
   if(n) saveSoon();
 }
-/* ===== O'Z SERVERIMIZGA ULANISH (server/server.js) ===== */
-const SERVER_URL = "https://bilimdon-server.onrender.com"; // o'z server manzilingiz (qo'yilmasa, mahalliy saqlash ishlaydi)
-const SERVER_KEY = ""; // serverdagi API_KEY bilan bir xil bo'lishi kerak (bo'sh bo'lsa kalitsiz)
+/* ===== SUPABASE BILAN ULANISH (bulutli, doimiy saqlash) ===== */
+const SUPA_URL = "https://euswfxkgamhszyjevitu.supabase.co";
+const SUPA_KEY = "sb_publishable_71xKp4iuePooZJ-pPS_-xw__q095PIS"; // Supabase → Connect → anon public kaliti (maxfiy emas)
 function serverDb(base, key){
-  if(!base || base.includes("YOUR-SERVER")) return null;
-  const api = (p, opt = {}) => {
-    const h = {"Content-Type": "application/json"}; if(key) h["X-API-Key"] = key;
-    return fetch(base + "/api/" + p, {...opt, headers: h}).then(r => {
-      if(!r.ok && r.status !== 404) throw new Error("server " + r.status);
-      return r;
-    });
+  if(!base || !key || key.startsWith("PUBLIC_ANON")) return null;
+  const H = {"apikey": key, "Authorization": "Bearer " + key, "Content-Type": "application/json"};
+  const rest = base + "/rest/v1/kv";
+  const q = (col, id) => "col=eq." + encodeURIComponent(col) + "&id=eq." + encodeURIComponent(id);
+  const req = async (url, opt = {}) => {
+    const r = await fetch(url, {...opt, headers: {...H, ...(opt.headers || {})}});
+    if(!r.ok) throw new Error("db " + r.status);
+    const t = await r.text();
+    return t ? JSON.parse(t) : null;
   };
   const subs = {}, lastSeen = {};
   const colSnap = async col => {
-    const j = await (await api(col)).json();
-    return {docs: j.docs.map(d => ({id: d.id, data(){ return d.data; }}))};
+    const rows = await req(rest + "?col=eq." + encodeURIComponent(col) + "&select=id,data");
+    return {docs: rows.map(r => ({id: r.id, data(){ return r.data; }}))};
   };
   /* Boshqa qurilmadagi o'zgarishlarni 8 soniyada bir tekshirish */
   setInterval(async () => {
@@ -1891,11 +1893,20 @@ function serverDb(base, key){
   }, 8000);
   return {
     doc(path){
-      const [col, id] = path.split("/"), url = col + "/" + id;
+      const [col, id] = path.split("/");
       return {
-        async get(){ const j = await (await api(url)).json(); return {exists: j.exists, data(){ return j.data; }}; },
-        async set(d){ await api(url, {method: "PUT", body: JSON.stringify(d)}); },
-        async delete(){ await api(url, {method: "DELETE"}); }
+        async get(){
+          const rows = await req(rest + "?" + q(col, id) + "&select=data");
+          return {exists: rows.length > 0, data(){ return rows[0] && rows[0].data; }};
+        },
+        async set(d){
+          await req(rest + "?on_conflict=col,id", {
+            method: "POST",
+            headers: {"Prefer": "resolution=merge-duplicates"},
+            body: JSON.stringify({col, id, data: d})
+          });
+        },
+        async delete(){ await req(rest + "?" + q(col, id), {method: "DELETE"}); }
       };
     },
     collection(col){
@@ -1914,7 +1925,7 @@ function serverDb(base, key){
 async function initDb(){
   try{
     await migratePw();
-    DB = (window.claude ? await window.claude.use("db") : null) || serverDb(SERVER_URL, SERVER_KEY) || localDb();
+    DB = (window.claude ? await window.claude.use("db") : null) || serverDb(SUPA_URL, SUPA_KEY) || localDb();
     if(!DB){ toast("Ma'lumotlar saqlanmaydi: ulanish yo'q"); return; }
     const meta = await DB.doc("meta/init").get();
     if(meta.exists){
