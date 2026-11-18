@@ -1018,10 +1018,11 @@ function archiveView(){
   if(!ARCHIVE.length) return '<p class="meta">O\'chirilgan ma\'lumotlar yo\'q.</p>';
   const names = {user:"Hisob", test:"Test", news:"Yangilik", bank:"Savol"};
   return `<p class="meta">O'chirilgan barcha ma'lumotlar shu yerda saqlanadi. Ularni istalgan vaqtda tiklash mumkin.</p>
+  <div style="margin:12px 0"><button class="btn ghost sm" data-act="purgeAll">Hammasini butunlay o'chirish</button></div>
   <div class="wrapx"><table><thead><tr><th>Tur</th><th>Nomi</th><th>Kim o'chirdi</th><th>Qachon</th><th>Bog'liq natijalar</th><th></th></tr></thead><tbody>${ARCHIVE.map(a => `<tr>
     <td>${names[a.tur] || esc(a.tur)}</td><td>${esc(a.nom)}</td><td>${esc(a.kim || "-")}</td>
     <td>${esc(new Date(a.vaqt).toLocaleString("uz-UZ"))}</td><td>${a.extra && a.extra.length ? a.extra.length + " ta" : "—"}</td>
-    <td class="nowrap"><button class="btn sm" data-act="restore" data-id="${a.id}">Tiklash</button></td></tr>`).join("")}</tbody></table></div>`;
+    <td class="nowrap"><button class="btn sm" data-act="restore" data-id="${a.id}">Tiklash</button> <button class="btn ghost sm" data-act="purge" data-id="${a.id}">Butunlay o'chirish</button></td></tr>`).join("")}</tbody></table></div>`;
 }
 function dataOverview(){
   const counts = [["Foydalanuvchilar", USERS.length], ["Testlar", TESTS.length], ["Natijalar", RESULTS.length], ["Yangiliklar", NEWS.length], ["Test bazasi", BANK.length], ["O'chirilganlar", ARCHIVE.length]];
@@ -1757,6 +1758,15 @@ document.addEventListener("click", async e => {
     toast("Zaxira nusxa yuklab olindi");
   }
   else if(a === "restore"){ restoreArchive(id); toast("Ma'lumot tiklandi"); render(); }
+  else if(a === "purge"){
+    if(!confirm("Bu ma'lumot butunlay o'chadi va qayta tiklab bo'lmaydi. Davom etasizmi?")) return;
+    ARCHIVE = ARCHIVE.filter(x => x.id !== id); saveSoon(); toast("Butunlay o'chirildi"); render();
+  }
+  else if(a === "purgeAll"){
+    if(!ARCHIVE.length) return;
+    if(!confirm("Barcha o'chirilganlar butunlay o'chadi va qayta tiklab bo'lmaydi. Davom etasizmi?")) return;
+    ARCHIVE = []; saveSoon(); toast("Hammasi butunlay o'chirildi"); render();
+  }
   else if(a === "print"){ window.print(); }
   else if(a === "certificate"){ if(S.user && S.user.rol === "student" && !SETTINGS.cert){ toast("Sertifikat bo'limi yopiq"); return; } printCertificate(); }
   else if(a === "delBank"){ const q = BANK[+b.dataset.i]; if(q) archiveAdd("bank", q[2], {f:q[0], b:q[1], s:q[2], v:q[3], j:q[4], id:q[5]}); BANK.splice(+b.dataset.i, 1); toast("Savol o'chirildi"); render(); }
