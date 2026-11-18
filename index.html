@@ -390,7 +390,7 @@ function render(){
 
   const tabs = TABS[u.rol];
   if(!tabs.some(t => t[0] === S.tab)) S.tab = tabs[0][0];
-  const nav = `<div class="tabs">${tabs.map(([k, n]) => `<button class="chip" aria-pressed="${S.tab === k}" data-act="tab" data-v="${k}">${u.rol === "student" && ((k === "cert" && !SETTINGS.cert) || (k === "prep" && !SETTINGS.prep)) ? "🔒 " : ""}${n}</button>`).join("")}</div>`;
+  const nav = `<div class="tabs">${tabs.map(([k, n]) => `<button class="chip" aria-pressed="${S.tab === k}" data-act="tab" data-v="${k}">${u.rol === "student" && ((k === "cert" && !hasAccess("cert")) || (k === "prep" && !hasAccess("prep"))) ? "🔒 " : ""}${n}</button>`).join("")}</div>`;
   const body =
     S.tab === "accounts" ? adminAccounts() :
     S.tab === "results" ? teacherResults() :
@@ -799,18 +799,55 @@ function olympManageView(){
 }
 
 /* ===== BO'LIMLARNI OCHISH/YOPISH (admin va o'qituvchi) ===== */
-const sectionOpen = k => !!SETTINGS[k];
+const hasAccess = k => {
+  const u = S.user && (userById(S.user.id) || S.user);
+  if(!u) return false;
+  if(u.rol !== "student") return true;
+  return !!(u.ruxsat && u.ruxsat[k]);
+};
+const sectionOpen = k => hasAccess(k);
 const canManage = () => !!S.user && ["admin","teacher"].includes(S.user.rol);
-function lockedView(name){
-  return `<section class="panel lock-box"><div class="ic">🔒</div><h3>${esc(name)} bo'limi yopiq</h3><p class="meta">Bu bo'lim hozircha o'quvchilar uchun yopiq. O'qituvchi yoki administrator ochgandan keyin foydalana olasiz.</p></section>`;
+const SEC_NAMES = {cert:"Sertifikat", prep:"Tayyorlov"};
+function lockedView(name, k){
+  const me = S.user && userById(S.user.id);
+  const pending = !!(me && (me.sorov || []).includes(k));
+  const action = pending
+    ? '<p class="meta">So\'rovingiz yuborildi. Administrator ruxsat berishini kuting.</p>'
+    : `<p><button class="btn" data-act="req-section" data-k="${k}">So'rov yuborish</button></p>`;
+  return `<section class="panel lock-box"><div class="ic">🔒</div><h3>${esc(name)} bo'limi yopiq</h3><p class="meta">Bu bo'limdan foydalanish uchun administratorga so'rov yuboring.</p>${S.user && S.user.rol === "student" ? action : ""}</section>`;
 }
 function sectionSwitches(){
-  const row = (k, nom, izoh) => `<div class="sw"><div><div class="st ${SETTINGS[k] ? "on" : "off"}">${SETTINGS[k] ? "🔓 Ochiq" : "🔒 Yopiq"} · ${nom}</div><div class="meta">${izoh}</div></div><button class="btn sm ${SETTINGS[k] ? "ghost" : ""}" data-act="section-toggle" data-k="${k}">${SETTINGS[k] ? "Yopish" : "Ochish"}</button></div>`;
+  const studs = USERS.filter(u => u.rol === "student");
+  const block = k => {
+    const req = studs.filter(u => (u.sorov || []).includes(k));
+    const ok = studs.filter(u => u.ruxsat && u.ruxsat[k]);
+    const line = (u, btn) => `<div class="sw"><div><strong>${esc(u.ism)}</strong> <span class="meta">(${esc(u.login || "")})</span></div>${btn}</div>`;
+    return `<h4 class="h4">${SEC_NAMES[k]}</h4>
+      ${req.length ? req.map(u => line(u, `<button class="btn sm" data-act="grant" data-k="${k}" data-id="${u.id}">Ruxsat berish</button>`)).join("") : '<p class="meta">Yangi so\'rovlar yo\'q.</p>'}
+      ${ok.length ? '<p class="meta" style="margin-top:10px">Ruxsati bor o\'quvchilar:</p>' + ok.map(u => line(u, `<button class="btn ghost sm" data-act="revoke" data-k="${k}" data-id="${u.id}">Olib qo'yish</button>`)).join("") : ""}`;
+  };
   return `<section class="panel" style="margin-bottom:16px"><h3 class="h3" style="margin-top:0">O'quvchilar uchun bo'limlar</h3>
-  ${row("cert", "Sertifikat", "O'quvchilar \"Sertifikat\" bo'limidan foydalanishi")}${row("prep", "Tayyorlov", "O'quvchilar \"Tayyorlov\" (mashq) bo'limidan foydalanishi")}</section>`;
+  <p class="meta">O'quvchilar bo'limga so'rov yuboradi. Ruxsat bergan o'quvchi faqat o'zi uchun shu bo'limdan foydalanadi.</p>
+  ${block("cert")}${block("prep")}</section>`;
 }
+/* O'quvchi so'rov yuboradi */
+document.addEventListener("click", e => {
+  const b = e.target.closest("[data-act='req-section']"); if(!b || !S.user || S.user.rol !== "student") return;
+  const u = userById(S.user.id); if(!u) return;
+  u.sorov = [...new Set([...(u.sorov || []), b.dataset.k])];
+  saveSoon(); toast("So'rov yuborildi"); render();
+});
+/* Admin/o'qituvchi ruxsat beradi yoki olib qo'yadi (faqat shu o'quvchiga) */
+document.addEventListener("click", e => {
+  const b = e.target.closest("[data-act='grant'], [data-act='revoke']"); if(!b || !canManage()) return;
+  const u = userById(b.dataset.id); if(!u) return;
+  const k = b.dataset.k, grant = b.dataset.act === "grant";
+  u.ruxsat = {...(u.ruxsat || {}), [k]: grant};
+  if(grant) u.sorov = (u.sorov || []).filter(x => x !== k);
+  saveSoon(); toast(grant ? "Ruxsat berildi" : "Ruxsat olib qo'yildi"); render();
+});
 function prepView(){
-  if(!sectionOpen("prep")) return lockedView("Tayyorlov");
+  if(!sectionOpen("prep")) return lockedView("Tayyorlov", "prep");
   const band = bandOf(S.user.sinf);
   const subs = SUBJECTS.filter(f => fanAvailable(f, band));
   return `<p class="meta">Fanni tanlang va sinf guruhingizga mos savollar bilan mashq qiling. Mashq natijasi saqlanmaydi, javobingiz darhol ko'rinadi.</p>
@@ -858,7 +895,7 @@ function serfStart(f){
   startExam(id);
 }
 function certView(){
-  if(!sectionOpen("cert")) return lockedView("Sertifikat");
+  if(!sectionOpen("cert")) return lockedView("Sertifikat", "cert");
   const u = S.user, rows = certStats(u), okN = rows.filter(r => r.ok).length, all = okN === SUBJECTS.length;
   if(S.certFor){
     const r = S.certFor.all ? null : rows.find(x => x.f === S.certFor.f);
@@ -1766,7 +1803,7 @@ document.addEventListener("click", async e => {
     ARCHIVE = []; saveSoon(); toast("Hammasi butunlay o'chirildi"); render();
   }
   else if(a === "print"){ window.print(); }
-  else if(a === "certificate"){ if(S.user && S.user.rol === "student" && !SETTINGS.cert){ toast("Sertifikat bo'limi yopiq"); return; } printCertificate(); }
+  else if(a === "certificate"){ if(S.user && S.user.rol === "student" && !hasAccess("cert")){ toast("Sertifikat bo'limi yopiq"); return; } printCertificate(); }
   else if(a === "delBank"){ const q = BANK[+b.dataset.i]; if(q) archiveAdd("bank", q[2], {f:q[0], b:q[1], s:q[2], v:q[3], j:q[4], id:q[5]}); BANK.splice(+b.dataset.i, 1); toast("Savol o'chirildi"); render(); }
   else if(a === "delNews"){ const n = NEWS[+b.dataset.i]; if(n) archiveAdd("news", n.sarlavha, {sana:n.sana, sarlavha:n.sarlavha, matn:n.matn, id:n.id}); NEWS.splice(+b.dataset.i, 1); toast("Yangilik o'chirildi"); render(); }
   else if(a === "saveTest") saveDraft();
@@ -2137,7 +2174,7 @@ document.addEventListener("click", e => {
 document.addEventListener("click", e => {
   const b = e.target.closest("[data-act^='cert-'], [data-act='serf-start'], [data-act='serfm-start']"); if(!b || !S.user || S.user.rol !== "student") return;
   const act = b.dataset.act;
-  if(!SETTINGS.cert){ toast("Sertifikat bo'limi yopiq"); render(); return; }
+  if(!hasAccess("cert")){ toast("Sertifikat bo'limi yopiq"); render(); return; }
   if(act === "cert-fan"){ S.certFor = {f: b.dataset.f}; render(); }
   else if(act === "cert-all"){ S.certFor = {all: true}; render(); }
   else if(act === "cert-back"){ S.certFor = null; render(); }
@@ -2148,7 +2185,7 @@ document.addEventListener("click", e => {
 document.addEventListener("click", e => {
   const b = e.target.closest("[data-act='olymp-add'], [data-act='olymp-del'], [data-act='prep']"); if(!b || !S.user) return;
   const act = b.dataset.act;
-  if(act === "prep" && S.user.rol === "student" && !SETTINGS.prep){ toast("Tayyorlov bo'limi yopiq"); render(); return; }
+  if(act === "prep" && S.user.rol === "student" && !hasAccess("prep")){ toast("Tayyorlov bo'limi yopiq"); render(); return; }
   if(act === "olymp-add"){
     if(!["admin","teacher"].includes(S.user.rol)) return;
     const nom = (document.getElementById("oNom").value || "").trim();
