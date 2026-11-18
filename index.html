@@ -817,18 +817,32 @@ function lockedView(name, k){
     : `<p><button class="btn" data-act="req-section" data-k="${k}">So'rov yuborish</button></p>`;
   return `<section class="panel lock-box"><div class="ic">🔒</div><h3>${esc(name)} bo'limi yopiq</h3><p class="meta">Bu bo'limdan foydalanish uchun administratorga so'rov yuboring.</p>${S.user && S.user.rol === "student" ? action : ""}</section>`;
 }
+function studentRoster(){
+  const studs = USERS.filter(u => u.rol === "student");
+  if(!studs.length) return '<h4 class="h4">O\'quvchilar ro\'yxati</h4><p class="meta">Hali o\'quvchilar yo\'q.</p>';
+  const yn = v => v ? "✅" : "—";
+  const rows = studs.map(u => {
+    const rs = RESULTS.filter(r => r.userId === u.id);
+    const avg = rs.length ? Math.round(rs.reduce((t, r) => t + r.ball, 0) / rs.length) : "—";
+    return `<tr><td>${esc(u.ism)}</td><td>${esc(u.login || "")}</td><td>${esc(u.sinf || "-")}</td><td>${esc(u.status || "active")}</td><td>${rs.length}</td><td>${avg}</td><td>${yn(u.ruxsat && u.ruxsat.cert)}</td><td>${yn(u.ruxsat && u.ruxsat.prep)}</td></tr>`;
+  }).join("");
+  return `<h4 class="h4">O'quvchilar ro'yxati (${studs.length} ta)</h4><div class="wrapx"><table><thead><tr><th>Ism</th><th>Login</th><th>Sinf</th><th>Holat</th><th>Testlar</th><th>O'rtacha ball</th><th>Sertifikat</th><th>Tayyorlov</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+}
 function sectionSwitches(){
   const studs = USERS.filter(u => u.rol === "student");
   const block = k => {
     const req = studs.filter(u => (u.sorov || []).includes(k));
     const ok = studs.filter(u => u.ruxsat && u.ruxsat[k]);
+    const others = studs.filter(u => !(u.ruxsat && u.ruxsat[k]));
     const line = (u, btn) => `<div class="sw"><div><strong>${esc(u.ism)}</strong> <span class="meta">(${esc(u.login || "")})</span></div>${btn}</div>`;
     return `<h4 class="h4">${SEC_NAMES[k]}</h4>
       ${req.length ? req.map(u => line(u, `<button class="btn sm" data-act="grant" data-k="${k}" data-id="${u.id}">Ruxsat berish</button>`)).join("") : '<p class="meta">Yangi so\'rovlar yo\'q.</p>'}
-      ${ok.length ? '<p class="meta" style="margin-top:10px">Ruxsati bor o\'quvchilar:</p>' + ok.map(u => line(u, `<button class="btn ghost sm" data-act="revoke" data-k="${k}" data-id="${u.id}">Olib qo'yish</button>`)).join("") : ""}`;
+      ${ok.length ? '<p class="meta" style="margin-top:10px">Ruxsati bor o\'quvchilar:</p>' + ok.map(u => line(u, `<button class="btn ghost sm" data-act="revoke" data-k="${k}" data-id="${u.id}">Olib qo'yish</button>`)).join("") : ""}
+      ${others.length ? `<div class="row" style="margin-top:12px;gap:8px;flex-wrap:wrap"><select id="pick-${k}">${others.map(u => `<option value="${u.id}">${esc(u.ism)} (${esc(u.login || "")})</option>`).join("")}</select><button class="btn sm" data-act="grant-pick" data-k="${k}">O'quvchiga ruxsat berish</button></div>` : ""}`;
   };
   return `<section class="panel" style="margin-bottom:16px"><h3 class="h3" style="margin-top:0">O'quvchilar uchun bo'limlar</h3>
   <p class="meta">O'quvchilar bo'limga so'rov yuboradi. Ruxsat bergan o'quvchi faqat o'zi uchun shu bo'limdan foydalanadi.</p>
+  ${studentRoster()}
   ${block("cert")}${block("prep")}</section>`;
 }
 /* O'quvchi so'rov yuboradi */
@@ -837,6 +851,15 @@ document.addEventListener("click", e => {
   const u = userById(S.user.id); if(!u) return;
   u.sorov = [...new Set([...(u.sorov || []), b.dataset.k])];
   saveSoon(); toast("So'rov yuborildi"); render();
+});
+/* Admin o'zi tanlab, so'rovsiz ruxsat beradi */
+document.addEventListener("click", e => {
+  const b = e.target.closest("[data-act='grant-pick']"); if(!b || !canManage()) return;
+  const k = b.dataset.k, sel = document.getElementById("pick-" + k);
+  const u = sel && userById(sel.value); if(!u) return;
+  u.ruxsat = {...(u.ruxsat || {}), [k]: true};
+  u.sorov = (u.sorov || []).filter(x => x !== k);
+  saveSoon(); toast("Ruxsat berildi"); render();
 });
 /* Admin/o'qituvchi ruxsat beradi yoki olib qo'yadi (faqat shu o'quvchiga) */
 document.addEventListener("click", e => {
