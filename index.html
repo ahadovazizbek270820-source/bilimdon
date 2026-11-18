@@ -1759,12 +1759,10 @@ document.addEventListener("click", async e => {
   }
   else if(a === "restore"){ restoreArchive(id); toast("Ma'lumot tiklandi"); render(); }
   else if(a === "purge"){
-    if(!confirm("Bu ma'lumot butunlay o'chadi va qayta tiklab bo'lmaydi. Davom etasizmi?")) return;
     ARCHIVE = ARCHIVE.filter(x => x.id !== id); saveSoon(); toast("Butunlay o'chirildi"); render();
   }
   else if(a === "purgeAll"){
     if(!ARCHIVE.length) return;
-    if(!confirm("Barcha o'chirilganlar butunlay o'chadi va qayta tiklab bo'lmaydi. Davom etasizmi?")) return;
     ARCHIVE = []; saveSoon(); toast("Hammasi butunlay o'chirildi"); render();
   }
   else if(a === "print"){ window.print(); }
