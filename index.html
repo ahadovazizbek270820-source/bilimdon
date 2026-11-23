@@ -196,12 +196,13 @@ html{overscroll-behavior-y:contain}body{overflow-x:hidden}
 
 <script>
 /* ===== MA'LUMOTLAR (xotirada; sahifa yangilansa tiklanadi) ===== */
-let USERS = [
+const DEFAULT_USERS = [
   {id:"u1", ism:"Administrator", login:"admin", parol:"admin123", rol:"admin", sinf:"", status:"active"},
   {id:"u2", ism:"Olim Karimov", login:"teacher1", parol:"teacher123", rol:"teacher", sinf:"", status:"active"},
   {id:"u3", ism:"Dilnoza Rahimova", login:"dilnoza", parol:"stud123", rol:"student", sinf:"8-A", status:"active"},
   {id:"u4", ism:"Akmal Tursunov", login:"akmal", parol:"stud123", rol:"student", sinf:"8-B", status:"active"}
 ];
+let USERS = DEFAULT_USERS.map(u => ({...u}));
 let TESTS = [
   {id:"t1", nom:"Matematika: 1-bosqich", fan:"Matematika", vaqt:10, muallif:"u2", savollar:[
     {s:"12 × 8 nechaga teng?", v:["86","96","106","98"], j:1},
@@ -1998,6 +1999,28 @@ function serverDb(base, key){
     }
   };
 }
+async function applyDefaultAccountsOnce(){
+  // Eski bazadagi hisoblarni bir marta foydalanuvchi belgilagan standart hisoblar bilan almashtiradi.
+  const marker = await DB.doc("meta/default-accounts-v1").get();
+  if(marker.exists) return;
+
+  const previousUsers = Array.isArray(USERS) ? USERS.slice() : [];
+  const keepIds = new Set(DEFAULT_USERS.map(u => u.id));
+  USERS = DEFAULT_USERS.map(u => ({...u}));
+  await migratePw(); // parollarni SHA-256 ko'rinishida saqlash
+
+  for(const oldUser of previousUsers){
+    if(oldUser && oldUser.id && !keepIds.has(oldUser.id)){
+      await DB.doc("users/" + oldUser.id).delete();
+    }
+  }
+  for(const user of USERS){
+    await DB.doc("users/" + user.id).set(user);
+  }
+  markSynced("users");
+  await DB.doc("meta/default-accounts-v1").set({version:1, at:today()});
+}
+
 async function initDb(){
   try{
     await migratePw();
@@ -2016,6 +2039,9 @@ async function initDb(){
       await syncDb();
       await DB.doc("meta/init").set({at: today()});
     }
+    // Avval navbatdagi saqlashlarni tugatib, keyin eski hisoblarni bir marta almashtiramiz.
+    await saveChain;
+    await applyDefaultAccountsOnce();
     COLS.forEach(subscribe);
     render();
   }catch(e){ toast("Ma'lumotlarni yuklab bo'lmadi"); }
