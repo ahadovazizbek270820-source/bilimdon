@@ -196,13 +196,12 @@ html{overscroll-behavior-y:contain}body{overflow-x:hidden}
 
 <script>
 /* ===== MA'LUMOTLAR (xotirada; sahifa yangilansa tiklanadi) ===== */
-const DEFAULT_USERS = [
+let USERS = [
   {id:"u1", ism:"Administrator", login:"admin", parol:"admin123", rol:"admin", sinf:"", status:"active"},
   {id:"u2", ism:"Olim Karimov", login:"teacher1", parol:"teacher123", rol:"teacher", sinf:"", status:"active"},
   {id:"u3", ism:"Dilnoza Rahimova", login:"dilnoza", parol:"stud123", rol:"student", sinf:"8-A", status:"active"},
   {id:"u4", ism:"Akmal Tursunov", login:"akmal", parol:"stud123", rol:"student", sinf:"8-B", status:"active"}
 ];
-let USERS = DEFAULT_USERS.map(u => ({...u}));
 let TESTS = [
   {id:"t1", nom:"Matematika: 1-bosqich", fan:"Matematika", vaqt:10, muallif:"u2", savollar:[
     {s:"12 × 8 nechaga teng?", v:["86","96","106","98"], j:1},
@@ -691,8 +690,9 @@ function parentGate(){
       <h2 class="h">Ota-ona kirishi</h2>
       <p class="meta">Farzandingiz natijalari va haftalik hisobot.</p>
       <form class="auth" data-form="login">
-        <label>Login<input name="l" required autocomplete="username"></label>
+        <label>Login<input name="l" required autocomplete="username" value="${esc(safeLS.getItem('bo_login') || '')}"></label>
         <label>Parol<input name="p" type="password" required autocomplete="current-password"></label>
+        ${savedChips()}
         <p class="msg" id="loginMsg" role="alert"></p>
         <button class="btn" type="submit">Kirish</button>
       </form></section>`;
@@ -1156,8 +1156,9 @@ function teacherGate(){
       <h2 class="h">O'qituvchi kirishi</h2>
       <p class="meta">Testlar yaratish va natijalar. Yangi hisob admin tasdiqlaganidan keyin ishlaydi.</p>
       <form class="auth" data-form="login">
-        <label>Login<input name="l" required autocomplete="username"></label>
+        <label>Login<input name="l" required autocomplete="username" value="${esc(safeLS.getItem('bo_login') || '')}"></label>
         <label>Parol<input name="p" type="password" required autocomplete="current-password"></label>
+        ${savedChips()}
         <p class="msg" id="loginMsg" role="alert"></p>
         <button class="btn" type="submit">Kirish</button>
       </form>
@@ -1193,8 +1194,9 @@ function staffGate(){
   return `<section class="panel" style="max-width:420px;margin:24px auto">
     <h2 class="h">Xodimlar kirishi</h2>
     <form class="auth" data-form="login">
-      <label>Login<input name="l" required autocomplete="username"></label>
+      <label>Login<input name="l" required autocomplete="username" value="${esc(safeLS.getItem('bo_login') || '')}"></label>
       <label>Parol<input name="p" type="password" required autocomplete="current-password"></label>
+        ${savedChips()}
       <p class="msg" id="loginMsg" role="alert"></p>
       <button class="btn" type="submit">Kirish</button>
     </form>
@@ -1208,8 +1210,9 @@ function oldGuest(){
       <h2 class="h">O'quvchi kirishi</h2>
       <p class="meta">Ro'yxatdan o'tgan login va parolingiz bilan kiring.</p>
       <form class="auth" data-form="login">
-        <label>Login<input name="l" required autocomplete="username"></label>
+        <label>Login<input name="l" required autocomplete="username" value="${esc(safeLS.getItem('bo_login') || '')}"></label>
         <label>Parol<input name="p" type="password" required autocomplete="current-password"></label>
+        ${savedChips()}
         <p class="msg" id="loginMsg" role="alert"></p>
         <button class="btn" type="submit">Kirish</button>
       </form>
@@ -1234,8 +1237,9 @@ function legacyGuest(){
       <h2 class="h">Kirish</h2>
       <p class="meta">Login va parolingizni administrator beradi.</p>
       <form class="auth" data-form="login">
-        <label>Login<input name="l" required autocomplete="username"></label>
+        <label>Login<input name="l" required autocomplete="username" value="${esc(safeLS.getItem('bo_login') || '')}"></label>
         <label>Parol<input name="p" type="password" required autocomplete="current-password"></label>
+        ${savedChips()}
         <p class="msg" id="loginMsg"></p>
         <button class="btn" type="submit">Kirish</button>
       </form>
@@ -1725,6 +1729,7 @@ document.addEventListener("submit", async e => {
     if(S.gate === "teacher" && u.rol !== "teacher"){ $("#loginMsg").textContent = "Bu o'qituvchi paneli. Faqat o'qituvchi hisobi kira oladi."; return; }
     if(u.rol === "teacher" && u.status === "pending"){ $("#loginMsg").textContent = "Hisobingiz hali tasdiqlanmagan. Administrator ruxsat berishini kuting."; return; }
     if(u.status === "rejected"){ $("#loginMsg").textContent = "Hisobingiz rad etilgan. Maktab administratoriga murojaat qiling."; return; }
+    rememberAcct(u);
     S.user = u; S.tab = ""; restoreExam(); render(); return;
   }
   if(k === "newUser"){
@@ -1784,7 +1789,15 @@ document.addEventListener("click", async e => {
   if(a === "authtab"){ S.authTab = b.dataset.v; render(); }
   else if(a === "gate"){ S.gate = b.dataset.v; render(); }
   else if(a === "back"){ location.hash = ""; S.gate = null; render(); }
-  else if(a === "logout"){ clearInterval(timerId); S.gate = null; S.exam = null; S.user = null; S.tab = ""; render(); }
+  else if(a === "quick"){
+    const u = userById(id); if(!u) return;
+    const r = acctsRaw().find(x => x.id === id);
+    if(!r || r.ph !== u.ph){ forgetAcct(id); render(); return toast("Bu hisob eskirgan, qaytadan kiring"); }
+    const er = entryError(u); if(er) return toast(er);
+    rememberAcct(u); S.user = u; S.tab = ""; restoreExam(); render();
+  }
+  else if(a === "forgetAcct"){ forgetAcct(id); render(); }
+  else if(a === "logout"){ safeLS.removeItem("bo_sess"); clearInterval(timerId); S.gate = null; S.exam = null; S.user = null; S.tab = ""; render(); }
   else if(a === "tab"){ S.tab = b.dataset.v; render(); }
   else if(a === "savePw"){
     const v = $(`[data-pw="${id}"]`).value;
@@ -1999,28 +2012,46 @@ function serverDb(base, key){
     }
   };
 }
-async function applyDefaultAccountsOnce(){
-  // Eski bazadagi hisoblarni bir marta foydalanuvchi belgilagan standart hisoblar bilan almashtiradi.
-  const marker = await DB.doc("meta/default-accounts-v1").get();
-  if(marker.exists) return;
-
-  const previousUsers = Array.isArray(USERS) ? USERS.slice() : [];
-  const keepIds = new Set(DEFAULT_USERS.map(u => u.id));
-  USERS = DEFAULT_USERS.map(u => ({...u}));
-  await migratePw(); // parollarni SHA-256 ko'rinishida saqlash
-
-  for(const oldUser of previousUsers){
-    if(oldUser && oldUser.id && !keepIds.has(oldUser.id)){
-      await DB.doc("users/" + oldUser.id).delete();
-    }
-  }
-  for(const user of USERS){
-    await DB.doc("users/" + user.id).set(user);
-  }
-  markSynced("users");
-  await DB.doc("meta/default-accounts-v1").set({version:1, at:today()});
+/* ===== SAQLANGAN HISOBLAR (har bir kirgan login shu qurilmada eslab qolinadi; o'chirilgan yoki paroli o'zgargani avtomatik tushib qoladi) ===== */
+let DB_READY = false;
+function acctsRaw(){ try{ const a = JSON.parse(safeLS.getItem("bo_accts") || "[]"); return Array.isArray(a) ? a : []; }catch(e){ return []; } }
+function savedAccts(){
+  const raw = acctsRaw();
+  if(!DB_READY) return [];
+  const ok = raw.filter(r => USERS.some(u => u.id === r.id && u.ph === r.ph && u.status !== "rejected"));
+  if(ok.length !== raw.length) safeLS.setItem("bo_accts", JSON.stringify(ok));
+  return ok.map(r => USERS.find(u => u.id === r.id));
 }
-
+function rememberAcct(u){
+  const a = acctsRaw().filter(r => r.id !== u.id);
+  a.unshift({id:u.id, ph:u.ph});
+  safeLS.setItem("bo_accts", JSON.stringify(a.slice(0, 12)));
+  safeLS.setItem("bo_login", u.login);
+  safeLS.setItem("bo_sess", JSON.stringify({id:u.id, ph:u.ph}));
+}
+function forgetAcct(id){ safeLS.setItem("bo_accts", JSON.stringify(acctsRaw().filter(r => r.id !== id))); }
+function savedChips(){
+  const list = savedAccts(); if(!list.length) return "";
+  return `<div class="saved-acc" style="margin:0 0 12px"><p class="meta" style="margin:0 0 6px">Saqlangan hisoblar (bosib kiring):</p><div style="display:flex;flex-wrap:wrap;gap:8px">${list.map(u => `<span style="display:inline-flex;align-items:center;gap:2px"><button type="button" class="chip" data-act="quick" data-id="${u.id}">${esc(u.ism)} · ${esc(u.login)}</button><button type="button" class="chip" data-act="forgetAcct" data-id="${u.id}" aria-label="Unutish" title="Ro'yxatdan olib tashlash">×</button></span>`).join("")}</div></div>`;
+}
+function entryError(u){
+  if(S.gate === "student" && u.rol !== "student") return "Bu kirish o'quvchilar uchun. Xodimlar kirishini tanlang.";
+  if(S.gate === "staff" && u.rol === "student") return "O'quvchilar o'quvchi kabineti orqali kiradi.";
+  if(S.gate === "parent" && u.rol !== "parent") return "Bu ota-ona kirishi. Faqat ota-ona hisobi kira oladi.";
+  if(S.gate === "teacher" && u.rol !== "teacher") return "Bu o'qituvchi paneli. Faqat o'qituvchi hisobi kira oladi.";
+  if(u.rol === "teacher" && u.status === "pending") return "Hisobingiz hali tasdiqlanmagan. Administrator ruxsat berishini kuting.";
+  if(u.status === "rejected") return "Hisobingiz rad etilgan. Maktab administratoriga murojaat qiling.";
+  return "";
+}
+function restoreSession(){
+  try{
+    const r = JSON.parse(safeLS.getItem("bo_sess") || "null");
+    if(!r || S.user) return;
+    const u = USERS.find(x => x.id === r.id && x.ph === r.ph);
+    if(!u || u.status === "rejected" || (u.rol === "teacher" && u.status === "pending")){ safeLS.removeItem("bo_sess"); return; }
+    S.user = u; S.tab = ""; restoreExam();
+  }catch(e){}
+}
 async function initDb(){
   try{
     await migratePw();
@@ -2039,10 +2070,9 @@ async function initDb(){
       await syncDb();
       await DB.doc("meta/init").set({at: today()});
     }
-    // Avval navbatdagi saqlashlarni tugatib, keyin eski hisoblarni bir marta almashtiramiz.
-    await saveChain;
-    await applyDefaultAccountsOnce();
     COLS.forEach(subscribe);
+    DB_READY = true;
+    restoreSession();
     render();
   }catch(e){ toast("Ma'lumotlarni yuklab bo'lmadi"); }
 }
@@ -2052,8 +2082,17 @@ async function hashPw(p){
   const d = await crypto.subtle.digest("SHA-256", new TextEncoder().encode("bilimdon2026:" + p));
   return [...new Uint8Array(d)].map(x => x.toString(16).padStart(2, "0")).join("");
 }
+const DEFAULT_MIG = [{id:"u1",ol:"bilimdon_admin",oph:"0e9c24efbda46fafcd63211a6e936d3ec6c251bd2cb2ed82ab81d0f319bd837d",nl:"admin",nph:"d6c441d6dbd7ac030e3778aca66990584d94bf2c78aa11cbc3d18f58a117e85b"},{id:"u2",ol:"o.karimov",oph:"1156929c9061c0c1f16192b68db63c87a078736a06888a13da4de9cff131ecd4",nl:"teacher1",nph:"c38596e61d62eb09d6902350e2bd16e9bb093b17234f9f32ed86b8a74c29f45b"},{id:"u3",ol:"d.rahimova",oph:"ee6dd2a68cca4bb6a058ad8f68a50795df9a69ccc4f0432bec1d2dd8aff7297c",nl:"dilnoza",nph:"54ed4f3b76fd395e02b4f21c9cdd3d0fdfe2b2fa0b755967adbfdd54d65ccf5d"},{id:"u4",ol:"a.tursunov",oph:"712289fa00e6e99c7f460df709a5a4e43fc0c6bc2755837c468947cfa4624c31",nl:"akmal",nph:"54ed4f3b76fd395e02b4f21c9cdd3d0fdfe2b2fa0b755967adbfdd54d65ccf5d"}];
+async function migrateDefaults(){
+  let ch = false;
+  for(const m of DEFAULT_MIG){
+    const u = USERS.find(x => x.id === m.id);
+    if(u && u.login === m.ol && u.ph === m.oph){ u.login = m.nl; u.ph = m.nph; ch = true; }
+  }
+  return ch;
+}
 async function migratePw(){
-  let changed = false;
+  let changed = await migrateDefaults();
   for(const u of USERS){ if(u.parol){ u.ph = await hashPw(u.parol); delete u.parol; changed = true; } }
   return changed;
 }
